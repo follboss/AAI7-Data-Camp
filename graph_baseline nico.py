@@ -13,8 +13,6 @@ import networkx as nx
 from random import randint
 from gensim.models import Word2Vec
 
-#%%
-
 import networkx as nx
 
 
@@ -27,8 +25,17 @@ print('Number of edges:', G.number_of_edges())
 
 #%%
 
+# montre moi les 10 premiers noeuds
+# *************  - controle  
+print (list(G.nodes())[0:10])
+print (list(G.edges())[0:10])
+
+#%%
+
 
 # Read training data
+# lire les données d'entrainement et de test
+
 train_papers = list()
 y_train = list()
 with open("y_train.txt", "r") as f:
@@ -46,82 +53,19 @@ with open("test.txt", "r") as f:
 
 #%%
 
-# Create the training matrix. Each row corresponds to a research paper.
-# Use the following 3 features for each paper:
-# (1) out-degree of node
-# (2) in-degree of node
-# (3) average degree of neighborhood of node
-core_nums = nx.core_number(G.to_undirected())
-X_train = np.zeros((len(train_papers), 3))
-#avg_neig_deg = nx.average_neighbor_degree(G, nodes=train_papers)
-for i in range(len(train_papers)):
-    X_train[i,0] = G.in_degree(train_papers[i])
-    X_train[i,1] = G.out_degree(train_papers[i])
-    X_train[i,2] = core_nums[train_papers[i]]
-    
+# le graphe en se limitant aux neoeds de train_papers
+# *************  - controle  
 
-
-#%%
-
-# extraire un sous graphe le plus cohérent possible de G  de 1000 noeuds
-
-nG = nx.subgraph(G, train_papers)
-
+nG = G.subgraph(train_papers)
+# #%%
 print('Number of nodes:', nG.number_of_nodes())
 print('Number of edges:', nG.number_of_edges())
 
 
 #%%
 
-import matplotlib.pyplot as plt
-
-
-#%%
-
-
-
-#%%
-
-train_papers
-#%%
-
-def extract_features(G, nodes):
-    X = np.zeros((len(nodes), 4))
-    core_nums = nx.core_number(G.to_undirected())
-    for i in range(len(nodes)):
-        X[i,0] = G.in_degree(nodes[i])
-        X[i,1] = G.out_degree(nodes[i])
-        X[i,2] = core_nums[nodes[i]]
-        X[i,3] = nx.clustering(G, nodes[i])
-
-    
-    return X
-
-X_train = extract_features(G, train_papers)
-#%%
-
-X_test = extract_features(G, test_papers)
-
-#%%
-#%%
-
-from nodevectors import Node2Vec
-
-#%%
-
-import nodevectors
-
-
-
-#%%
-
-
-
 def random_walk(G, node, walk_length):
     
-    ##################
-    # your code here #
-    ##################
     walk = [node]
 
     walki = node
@@ -143,17 +87,12 @@ def random_walk(G, node, walk_length):
 
 
 #%%
-
-#%% 
-
+# *************  - controle  
 Gun = nx.to_undirected(G)
-
-#%%
 u = random_walk(Gun, 1, 10)
 print(u)
 
 #%%
-
 
 ############## Task 2
 # Runs "num_walks" random walks from each node
@@ -172,19 +111,12 @@ def generate_walks(G, num_walks, walk_length):
     return walks
 
 #%%
-
+# *************  - controle  
 w = generate_walks(Gun, 2, 5)
-
-
-#%%
-
 # nombre d eneouds
 print (len(G.nodes()))
-
-#%%
-
 print (len(w))
-
+print (len(train_papers))
 
 #%%
 
@@ -195,57 +127,68 @@ def deepwalk(G, num_walks, walk_length, n_dim):
     walks = generate_walks(G, num_walks, walk_length)
 
     print("Training word2vec")
-    model = Word2Vec(vector_size=n_dim, window=3, min_count=0, sg=0, workers=8, hs=1)
-    model.build_vocab(walks)
-    model.train(walks, total_examples=model.corpus_count, epochs=5)
+    modelV = Word2Vec(vector_size=n_dim, window=3, min_count=0, sg=0, workers=8, hs=1) ####### PARAMETRES !
+    modelV.build_vocab(walks)
+    modelV.train(walks, total_examples=modelV.corpus_count, epochs=5)
 
-    return model
+    return modelV
 
 
 #%%
 
-model = deepwalk(Gun, 4, 10, 40)
+modelV = deepwalk(Gun, 4, 10, 64) ####### PARAMETRES !
 
 #%%
 
 # montre moi le vocabulaire
-
-model.wv[6]
-
-#%%
-
-# taille de l'embedding
-
-# taille du vocabulaire
-
-print (len(model.wv))
+# *************  - controle  
+modelV.wv[6]
+print (len(modelV.wv))
+modelV.wv[str(train_papers[6])]
 
 
-model.wv[str(train_papers[6])]
-#%%%
 
 
 #%%
+# charge les embeddings
+
+# les poids qui viennent du traitement des abstracts
+
+empb_train = np.load('empb_train.npy')
+empb_test = np.load('empb_test.npy')
+#%%
 
 
-def extract_features(G, nodes):
-    X = np.zeros((len(nodes), 24))
+####### PARAMETRES => paramétriser le 68, le 200, la couche d'entrée du NN
+def extract_features(G, nodes, embd):
+    X = np.zeros((len(nodes), 268))
+    print (X.shape)
     core_nums = nx.core_number(G.to_undirected())
     for i in range(len(nodes)):
         X[i,0] = G.in_degree(nodes[i])
         X[i,1] = G.out_degree(nodes[i])
         X[i,2] = core_nums[nodes[i]]
         X[i,3] = nx.clustering(G, nodes[i])
-        X[i,4:] = model.wv[str(nodes[i])]
+        X[i,4:68] = modelV.wv[str(nodes[i])]
+        X[i,68:268] = embd[i]
     return X
 
-X_train = extract_features(G, train_papers)
-X_test = extract_features(G, test_papers)
+X_train = extract_features(G, train_papers, empb_train)
+X_test = extract_features(G, test_papers, empb_test)
+
+#%%
+# *************  - controle  
+print (X_train.shape)
+print (len(y_train))
+#%%
+
+from sklearn.model_selection import train_test_split
+X_train , X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.1, random_state=42)
 
 
 
 #%%
-
+# *************  - controle  
 print("Train matrix dimension: ", X_train.shape)
 print("Test matrix dimension: ", X_test.shape)
 
@@ -267,54 +210,159 @@ print('Log loss:', log_loss(y_test, y_pred_proba))
 
 #%%
 
+##################################
 
 
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.utils.data as utils
+
+from torch.utils.data import DataLoader, TensorDataset
+
+
+#%%
+
+#%%
+class NN(torch.nn.Module):
+    def __init__(self):
+        super(NN, self).__init__()
+        self.fc1 = torch.nn.Linear(268, 128)
+        self.fc2 = torch.nn.Linear(128,32)
+        self.fc3 = torch.nn.Linear(32, 5)
+        self.dropout = torch.nn.Dropout(0.5) #268/256/128/5 ; 0.5 ####### PARAMETRES !
+        self.relu = torch.nn.ReLU()
+
+    def forward(self, x):
+        x = self.relu(self.fc1(x))
+        x = self.dropout(x)
+        x = self.relu(self.fc2(x))
+        x = self.dropout(x)
+        x = self.fc3(x)
+
+        return F.log_softmax(x, dim=1)
+    
+
+#%%
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+model = NN().to(device)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=5e-4)
+
+#%%
+
+
+train_dataset = TensorDataset(torch.tensor(X_train,dtype=torch.float), torch.tensor(y_train,dtype=torch.long))
+train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+test_dataset = TensorDataset(torch.tensor(X_test,dtype=torch.float), torch.tensor(y_test,dtype=torch.long))
+test_loader = DataLoader(test_dataset, batch_size=64, shuffle=True)
+
+val_dataset = TensorDataset(torch.tensor(X_val,dtype=torch.float), torch.tensor(y_val,dtype=torch.long))
+val_loader = DataLoader(val_dataset, batch_size=64, shuffle=True)
 
 #%%
 
 
 
-import torch
-import torch.nn.functional as F
-from torch_geometric.nn import GCNConv
-from torch_geometric.datasets import Planetoid
-from torch_geometric.data import Data
+#%%
+num_epochs = 20  ####### PARAMETRES !
 
-# Charger les données
-dataset = Planetoid(root='/tmp/Cora', name='Cora')
+criterion = nn.CrossEntropyLoss()
 
-class GCN(torch.nn.Module):
-    def __init__(self):
-        super(GCN, self).__init__()
-        self.conv1 = GCNConv(dataset.num_node_features, 16)
-        self.conv2 = GCNConv(16, dataset.num_classes)
 
-    def forward(self, data):
-        x, edge_index = data.x, data.edge_index
-        x = self.conv1(x, edge_index)
-        x = F.relu(x)
-        x = F.dropout(x, training=self.training)
-        x = self.conv2(x, edge_index)
-        return F.log_softmax(x, dim=1)
+best_acc = 0.0
 
-# Entraînement du modèle
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-model = GCN().to(device)
-data = dataset[0].to(device)
-optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
+for epoch in range(num_epochs):
+    model.train()
+    running_loss = 0.0
+    
+    for i, data in enumerate(train_loader):
+        inputs, labels = data[0].to(device), data[1].to(device)
+        optimizer.zero_grad()
+        outputs = model(inputs.float())
+        loss = criterion(outputs, labels)
+        loss.backward()
+        optimizer.step()
+        
+        running_loss += loss.item() * inputs.size(0)
 
-model.train()
-for epoch in range(200):
-    optimizer.zero_grad()
-    out = model(data)
-    loss = F.nll_loss(out[data.train_mask], data.y[data.train_mask])
-    loss.backward()
-    optimizer.step()
+    epoch_loss = running_loss / len(train_loader.dataset)
 
-# Évaluation du modèle
+    model.eval()
+    correct = 0
+    total = 0
+    running_loss_val = 0.0
+
+    for i, data in enumerate(val_loader):
+        inputs, labels = data[0].to(device), data[1].to(device)
+        outputs = model(inputs.float())
+        loss = criterion(outputs, labels)
+        running_loss_val += loss.item() * inputs.size(0)
+        _, predicted = torch.max(outputs.data, 1)
+        total += labels.size(0)
+        correct += (predicted == labels).sum().item()
+
+    val_acc = correct / total
+    avg_eval_loss = running_loss_val / len(test_loader.dataset)
+    
+    epoch_val_loss = running_loss_val / len(val_loader.dataset)
+    print('Epoch: {} \tTraining Loss: {:.6f}'.format(epoch, epoch_loss))
+    print('Epoch: {} \tValidation Loss: {:.6f}'.format(epoch, epoch_val_loss))
+    print('Validation accuracy: {:.4f}'.format(val_acc))
+
+    ## ici on sauve les parametres pour un usage ultérieur
+    is_best = (val_acc >= best_acc)
+    best_acc = max(val_acc, best_acc)
+    if is_best:
+        torch.save({
+                'state_dict': model.state_dict()
+         }, 'model_best.pth.tar')
+    
+    
+    
+    # model.eval()
+    # correct = 0
+    # total = 0
+    # eval_loss = 0.0
+    
+    # with torch.no_grad():
+    #     for data in test_loader:
+    #         inputs, labels = data[0].to(device), data[1].to(device)
+    #         outputs = model(inputs.float())
+    #         loss = criterion(outputs, labels)
+    #         eval_loss += loss.item() * inputs.size(0)
+    #         _, predicted = torch.max(outputs.data, 1)
+    #         total += labels.size(0)
+    #         correct += (predicted == labels).sum().item()
+
+    # accuracy = correct / total
+    # avg_eval_loss = eval_loss / len(test_loader.dataset)
+
+    # print(f"Epoch [{epoch+1}/{num_epochs}], Train Loss: {epoch_loss:.4f}, Eval Loss: {avg_eval_loss:.4f}, Accuracy: {accuracy:.4f}")
+    # let le log_loss
+
+     
+#%%
+
+### 
+
+# alller rechercher le meilleur modele 
+# dans le file 
+
+checkpoint = torch.load('model_best.pth.tar')
+model.load_state_dict(checkpoint['state_dict'])
+
 model.eval()
-_, pred = model(data).max(dim=1)
-correct = int(pred[data.test_mask].eq(data.y[data.test_mask]).sum().item())
-acc = correct / int(data.test_mask.sum())
-print(f'Accuracy: {acc:.4f}')
+correct = 0
+total = 0
+with torch.no_grad():
+    for inputs, labels in test_loader:
+        inputs, labels = inputs.to(device), labels.to(device)
+        outputs = model(inputs)
+        _, predicted = torch.max(outputs.data, 1)
+        total += labels.size(0)
+        correct += (predicted == labels).sum().item()
+
+accuracy = correct / total
+print(f'Final Test Accuracy: {accuracy:.4f}')
+
